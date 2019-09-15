@@ -40,13 +40,13 @@
                 inplementationClass= FQN of inspection implementation
                -->
         <localInspection language="JAVA"
-                         displayName="Non-null constraint violated"
+                         displayName="Method arg constraint violated"
                          groupPath="Java"
                          groupBundle="messages.InspectionsBundle"
                          groupKey="group.names.probable.bugs"
                          enabledByDefault="true"
                          level="ERROR"
-                         implementationClass="ComparingReferencesInspection"/>
+                         implementationClass="InvalidArgInspection"/>
 
     </extensions>
 

@@ -2,13 +2,8 @@ import com.intellij.codeInspection.AbstractBaseJavaLocalInspectionTool;
 import com.intellij.codeInspection.ProblemsHolder;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.psi.*;
-import com.intellij.ui.DocumentAdapter;
-import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
-import javax.swing.*;
-import javax.swing.event.DocumentEvent;
-import java.awt.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 
@@ -32,37 +27,73 @@ public class InvalidArgInspection extends AbstractBaseJavaLocalInspectionTool {
         return new JavaElementVisitor() {
 
             @Override
+            public void visitNewExpression(PsiNewExpression expression) {
+                PsiJavaCodeReferenceElement classReference = expression.getClassReference();
+                if (classReference != null) {
+                    String className = classReference.getQualifiedName();
+                    String apiName = classReference.getReferenceName();
+
+                    PsiType[] parameterTypes = expression.getArgumentList().getExpressionTypes();
+                    String[] paramTypes = new String[parameterTypes.length];
+                    for (int i = 0; i < parameterTypes.length; i++) paramTypes[i] = parameterTypes[i].getPresentableText();
+
+
+                    APIMethod apiMethod = rules.getApi(className, apiName, paramTypes);
+                    if (apiMethod != null) {
+                        InvalidArgCaveat caveat = (InvalidArgCaveat) apiMethod.getCaveat(InvalidArgCaveat.class);
+                        if (caveat != null) {
+                            PsiExpression[] expressions = expression.getArgumentList().getExpressions();
+                            String[] args = new String[expressions.length];
+                            for (int i = 0; i < expressions.length; i++) args[i] = expressions[i].getText();
+                            ArrayList<CaveatViolation> lst = caveat.checkViolation(args);
+
+                            for (CaveatViolation cv : lst) {
+                                holder.registerProblem(expression,
+                                        "Parameter number " + (cv.index + 1) +" " + cv.reason);
+                            }
+                        }
+                    }
+                }
+            }
+
+            @Override
             public void visitMethodCallExpression(PsiMethodCallExpression expression) {
                 super.visitMethodCallExpression(expression);
 
                 PsiMethod method = expression.resolveMethod();
-                String apiName = method.getName();
-                String className = method.getContainingClass().getQualifiedName();
+                if (method != null) {
+                    String apiName = method.getName();
 
-                PsiParameter[] parameters = method.getParameterList().getParameters();
-                String[] paramTypes = new String[parameters.length];
+                    if (method.getContainingClass() != null) {
+                        String className = method.getContainingClass().getQualifiedName();
 
-                for (int i = 0; i < parameters.length; i++) {
-                    paramTypes[i] = parameters[i].getType().getPresentableText();
-                }
+                        PsiParameter[] parameters = method.getParameterList().getParameters();
+                        String[] paramTypes = new String[parameters.length];
 
-                APIMethod apiMethod = rules.getApi(className, apiName, paramTypes);
-                if (apiMethod != null) {
-                    NonNullCaveat caveat = (NonNullCaveat) apiMethod.getCaveat(NonNullCaveat.class);
-                    if (caveat != null) {
-                        PsiType[] psiArgTypes = expression.getArgumentList().getExpressionTypes();
-                        String[] argTypes = new String[psiArgTypes.length];
-                        for (int i = 0; i < psiArgTypes.length; i++) argTypes[i] = psiArgTypes[i].getPresentableText();
-                        ArrayList<Integer> lst = caveat.checkViolation(argTypes);
+                        for (int i = 0; i < parameters.length; i++) {
+                            paramTypes[i] = parameters[i].getType().getPresentableText();
+                        }
 
-                        for (Integer j : lst) {
-                            holder.registerProblem(expression,
-                                    "Parameter \"" + parameters[j].getName() +"\" must not be null in:\n" + apiMethod.signature);
+                        APIMethod apiMethod = rules.getApi(className, apiName, paramTypes);
+                        if (apiMethod != null) {
+
+                            InvalidArgCaveat caveat = (InvalidArgCaveat) apiMethod.getCaveat(InvalidArgCaveat.class);
+                            if (caveat != null) {
+                                PsiExpression[] expressions = expression.getArgumentList().getExpressions();
+                                String[] args = new String[expressions.length];
+                                for (int i = 0; i < expressions.length; i++) args[i] = expressions[i].getText();
+                                System.out.println(caveat);
+                                ArrayList<CaveatViolation> lst = caveat.checkViolation(args);
+
+                                for (CaveatViolation cv : lst) {
+                                    holder.registerProblem(expression,
+                                            "Parameter \"" + parameters[cv.index].getName() +"\" " + cv.reason + ": \n" + apiMethod.signature);
+                                }
+                            }
                         }
                     }
+
                 }
-
-
             }
         };
     }
